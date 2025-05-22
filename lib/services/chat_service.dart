@@ -125,9 +125,6 @@ class ChatService extends ChangeNotifier {
       // 이벤트 핸들러 등록
       _registerHubHandlers();
       
-      if (_hubConnection == null) {
-        throw Exception('HubConnection이 null입니다.');
-      }
       // 연결 시작 (타임아웃 설정)
       await _hubConnection!.start()?.timeout(
         const Duration(seconds: 10),
@@ -180,32 +177,55 @@ class ChatService extends ChangeNotifier {
   
   // 안전한 서버 호출을 위한 헬퍼
   Future<T> _safeInvoke<T>(String methodName, {List<Object>? args}) async {
-  if (!_isConnectionValid) {
-    throw Exception('서버 연결이 끊어졌습니다');
+    if (!_isConnectionValid) {
+      throw Exception('서버 연결이 끊어졌습니다');
+    }
+    
+    try {
+      final result = await _hubConnection!.invoke(methodName, args: args);
+      return result as T;
+    } catch (e) {
+      debugPrint('서버 호출 실패 ($methodName): $e');
+      
+      // 연결이 끊어진 경우 상태 업데이트
+      if (e.toString().contains('underlying connection being closed') ||
+          e.toString().contains('connection is closed')) {
+        _isConnected = false;
+        _connectionStatus = '연결 끊김';
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
   
-  try {
-    final result = await _hubConnection!.invoke(methodName, args: args);
-    return result as T;
-  } catch (e) {
-    debugPrint('서버 호출 실패 ($methodName): $e');
-    
-    if (e.toString().contains('underlying connection being closed') ||
-        e.toString().contains('connection is closed')) {
-      _isConnected = false;
-      _connectionStatus = '연결 끊김';
-      notifyListeners();
+  // void 반환용 안전한 서버 호출 헬퍼
+  Future<void> _safeInvokeVoid(String methodName, {List<Object>? args}) async {
+    if (!_isConnectionValid) {
+      throw Exception('서버 연결이 끊어졌습니다');
     }
-    rethrow;
+    
+    try {
+      await _hubConnection!.invoke(methodName, args: args);
+    } catch (e) {
+      debugPrint('서버 호출 실패 ($methodName): $e');
+      
+      // 연결이 끊어진 경우 상태 업데이트
+      if (e.toString().contains('underlying connection being closed') ||
+          e.toString().contains('connection is closed')) {
+        _isConnected = false;
+        _connectionStatus = '연결 끊김';
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
-}
   
   // 클라이언트 등록
   Future<void> _registerClient() async {
     try {
       final gender = AppPreferences.gender;
       
-      await _safeInvoke('Register', args: [
+      await _safeInvokeVoid('Register', args: [
         {
           'ClientId': _clientId,
           'Latitude': _latitude,
@@ -233,7 +253,7 @@ class ChatService extends ChangeNotifier {
       _matchStatus = '매칭 대기열에 참가 중...';
       notifyListeners();
       
-      await _safeInvoke('JoinWaitingQueue', args: [
+      await _safeInvokeVoid('JoinWaitingQueue', args: [
         _latitude,
         _longitude,
         AppPreferences.gender,
@@ -252,7 +272,7 @@ class ChatService extends ChangeNotifier {
     if (!_isConnectionValid) return;
     
     try {
-      await _safeInvoke('EndChat');
+      await _safeInvokeVoid('EndChat');
       
       _messages.add(ChatMessage(
         content: '대화를 종료하고 새로운 상대를 찾습니다.',
@@ -277,7 +297,7 @@ class ChatService extends ChangeNotifier {
     if (!_isConnectionValid || !_isMatched || message.trim().isEmpty) return;
     
     try {
-      await _safeInvoke('SendMessage', args: [message]);
+      await _safeInvokeVoid('SendMessage', args: [message]);
     } catch (e) {
       debugPrint('메시지 전송 실패: $e');
       _messages.add(ChatMessage(
@@ -352,7 +372,7 @@ class ChatService extends ChangeNotifier {
       _preferredGenderValue = preferredGender;
       _maxDistance = maxDistance;
       
-      await _safeInvoke('UpdatePreferences', args: [preferredGender, maxDistance]);
+      await _safeInvokeVoid('UpdatePreferences', args: [preferredGender, maxDistance]);
       
       AppPreferences.preferredGender = preferredGender;
       AppPreferences.maxDistance = maxDistance;
@@ -367,7 +387,7 @@ class ChatService extends ChangeNotifier {
     if (!_isConnectionValid || !canActivatePreference) return;
     
     try {
-      await _safeInvoke('ActivatePreference', args: [preferredGender, maxDistance]);
+      await _safeInvokeVoid('ActivatePreference', args: [preferredGender, maxDistance]);
     } catch (e) {
       debugPrint('선호도 활성화 실패: $e');
       rethrow;
@@ -382,7 +402,7 @@ class ChatService extends ChangeNotifier {
       _latitude = latitude;
       _longitude = longitude;
       
-      await _safeInvoke('UpdateLocation', args: [latitude, longitude]);
+      await _safeInvokeVoid('UpdateLocation', args: [latitude, longitude]);
       
       AppPreferences.latitude = latitude;
       AppPreferences.longitude = longitude;
@@ -483,20 +503,108 @@ class ChatService extends ChangeNotifier {
     });
   }
   
-  // 등록 완료 핸들러
-  void _handleRegistered(List<Object?>? args) {
-    if (args == null || args.isEmpty) return;
-    
+  // 안전한 JSON 파싱 헬퍼
+  Map<String, dynamic>? _safeJsonDecode(String jsonString) {
     try {
-      final data = jsonDecode(args[0].toString());
-      _clientId = data['clientId'];
-      
-      if (data['points'] != null) {
-        _points = data['points'];
+      if (jsonString.trim().isEmpty) {
+        debugPrint('빈 JSON 문자열 수신');
+        return null;
       }
       
-      if (data['preferenceActiveUntil'] != null && data['preferenceActiveUntil'] != 'null') {
-        _preferenceActiveUntil = DateTime.parse(data['preferenceActiveUntil']);
+      debugPrint('JSON 파싱 시도: $jsonString');
+      
+      // JavaScript 객체 문법을 JSON으로 변환
+      String processedJson = jsonString.trim();
+      
+      // 간단한 JavaScript 객체 문법을 JSON으로 변환
+      if (processedJson.startsWith('{') && processedJson.endsWith('}') && !processedJson.contains('"')) {
+        // JavaScript 객체 형식을 JSON으로 변환
+        processedJson = _convertJsObjectToJson(processedJson);
+        debugPrint('변환된 JSON: $processedJson');
+      }
+      
+      return jsonDecode(processedJson) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('JSON 파싱 실패: $e, 원본 데이터: $jsonString');
+      return null;
+    }
+  }
+  
+  // JavaScript 객체를 JSON으로 변환하는 헬퍼
+  String _convertJsObjectToJson(String jsObject) {
+    try {
+      // 중괄호 제거
+      String content = jsObject.substring(1, jsObject.length - 1);
+      
+      // 키-값 쌍들을 분리
+      List<String> pairs = [];
+      List<String> parts = content.split(',');
+      
+      for (String part in parts) {
+        part = part.trim();
+        if (part.isEmpty) continue;
+        
+        int colonIndex = part.indexOf(':');
+        if (colonIndex > 0) {
+          String key = part.substring(0, colonIndex).trim();
+          String value = part.substring(colonIndex + 1).trim();
+          
+          // 키에 따옴표 추가
+          if (!key.startsWith('"')) {
+            key = '"$key"';
+          }
+          
+          // 값에 따옴표 추가 (숫자가 아닌 경우)
+          if (!value.startsWith('"') && !_isNumeric(value) && value != 'true' && value != 'false' && value != 'null') {
+            value = '"$value"';
+          }
+          
+          pairs.add('$key: $value');
+        }
+      }
+      
+      return '{${pairs.join(', ')}}';
+    } catch (e) {
+      debugPrint('JavaScript 객체 변환 실패: $e');
+      return jsObject; // 변환 실패시 원본 반환
+    }
+  }
+  
+  // 숫자인지 확인하는 헬퍼
+  bool _isNumeric(String str) {
+    if (str.isEmpty) return false;
+    return double.tryParse(str) != null;
+  }
+
+  // 등록 완료 핸들러
+  void _handleRegistered(List<Object?>? args) {
+    if (args == null || args.isEmpty) {
+      debugPrint('등록 응답이 비어있음');
+      return;
+    }
+    
+    try {
+      final rawData = args[0]?.toString() ?? '';
+      final data = _safeJsonDecode(rawData);
+      
+      if (data == null) {
+        debugPrint('등록 응답 JSON 파싱 실패');
+        return;
+      }
+      
+      _clientId = data['clientId']?.toString();
+      
+      if (data['points'] != null) {
+        _points = int.tryParse(data['points'].toString()) ?? _points;
+      }
+      
+      if (data['preferenceActiveUntil'] != null && 
+          data['preferenceActiveUntil'].toString() != 'null') {
+        try {
+          _preferenceActiveUntil = DateTime.parse(data['preferenceActiveUntil'].toString());
+        } catch (e) {
+          debugPrint('날짜 파싱 실패: $e');
+        }
       }
       
       AppPreferences.clientId = _clientId ?? '';
@@ -521,12 +629,22 @@ class ChatService extends ChangeNotifier {
   
   // 매칭 완료 핸들러
   void _handleMatched(List<Object?>? args) {
-    if (args == null || args.isEmpty) return;
+    if (args == null || args.isEmpty) {
+      debugPrint('매칭 응답이 비어있음');
+      return;
+    }
     
     try {
-      final data = jsonDecode(args[0].toString());
-      _partnerGender = data['partnerGender'];
-      _distance = data['distance'].toDouble();
+      final rawData = args[0]?.toString() ?? '';
+      final data = _safeJsonDecode(rawData);
+      
+      if (data == null) {
+        debugPrint('매칭 응답 JSON 파싱 실패');
+        return;
+      }
+      
+      _partnerGender = data['partnerGender']?.toString() ?? '';
+      _distance = double.tryParse(data['distance']?.toString() ?? '0') ?? 0.0;
       
       _isMatched = true;
       _matchStatus = '매칭됨: ${_partnerGender == 'male' ? '남성' : '여성'}, 거리: ${_distance.toStringAsFixed(1)}km';
@@ -560,13 +678,31 @@ class ChatService extends ChangeNotifier {
   
   // 메시지 수신 핸들러
   void _handleReceiveMessage(List<Object?>? args) {
-    if (args == null || args.isEmpty) return;
+    if (args == null || args.isEmpty) {
+      debugPrint('메시지 응답이 비어있음');
+      return;
+    }
     
     try {
-      final data = jsonDecode(args[0].toString());
-      final senderId = data['senderId'];
-      final message = data['message'];
-      final timestamp = DateTime.parse(data['timestamp']);
+      final rawData = args[0]?.toString() ?? '';
+      final data = _safeJsonDecode(rawData);
+      
+      if (data == null) {
+        debugPrint('메시지 응답 JSON 파싱 실패');
+        return;
+      }
+      
+      final senderId = data['senderId']?.toString() ?? '';
+      final message = data['message']?.toString() ?? '';
+      final timestampStr = data['timestamp']?.toString() ?? '';
+      
+      DateTime timestamp;
+      try {
+        timestamp = DateTime.parse(timestampStr);
+      } catch (e) {
+        debugPrint('타임스탬프 파싱 실패: $e');
+        timestamp = DateTime.now();
+      }
       
       final isFromMe = senderId == _clientId;
       
@@ -584,15 +720,33 @@ class ChatService extends ChangeNotifier {
   
   // 이미지 메시지 수신 핸들러
   void _handleReceiveImageMessage(List<Object?>? args) {
-    if (args == null || args.isEmpty) return;
+    if (args == null || args.isEmpty) {
+      debugPrint('이미지 메시지 응답이 비어있음');
+      return;
+    }
     
     try {
-      final data = jsonDecode(args[0].toString());
-      final senderId = data['senderId'];
-      final imageId = data['imageId'];
-      final thumbnailUrl = data['thumbnailUrl'];
-      final imageUrl = data['imageUrl'];
-      final timestamp = DateTime.parse(data['timestamp']);
+      final rawData = args[0]?.toString() ?? '';
+      final data = _safeJsonDecode(rawData);
+      
+      if (data == null) {
+        debugPrint('이미지 메시지 응답 JSON 파싱 실패');
+        return;
+      }
+      
+      final senderId = data['senderId']?.toString() ?? '';
+      final imageId = data['imageId']?.toString() ?? '';
+      final thumbnailUrl = data['thumbnailUrl']?.toString() ?? '';
+      final imageUrl = data['imageUrl']?.toString() ?? '';
+      final timestampStr = data['timestamp']?.toString() ?? '';
+      
+      DateTime timestamp;
+      try {
+        timestamp = DateTime.parse(timestampStr);
+      } catch (e) {
+        debugPrint('타임스탬프 파싱 실패: $e');
+        timestamp = DateTime.now();
+      }
       
       final isFromMe = senderId == _clientId;
       
@@ -624,15 +778,30 @@ class ChatService extends ChangeNotifier {
   
   // 포인트 업데이트 핸들러
   void _handlePointsUpdated(List<Object?>? args) {
-    if (args == null || args.isEmpty) return;
+    if (args == null || args.isEmpty) {
+      debugPrint('포인트 업데이트 응답이 비어있음');
+      return;
+    }
     
     try {
-      final data = jsonDecode(args[0].toString());
-      _points = data['points'];
+      final rawData = args[0]?.toString() ?? '';
+      final data = _safeJsonDecode(rawData);
+      
+      if (data == null) {
+        debugPrint('포인트 업데이트 응답 JSON 파싱 실패');
+        return;
+      }
+      
+      _points = int.tryParse(data['points']?.toString() ?? '0') ?? _points;
       
       DateTime? activeUntil;
-      if (data['preferenceActiveUntil'] != null && data['preferenceActiveUntil'] != 'null') {
-        activeUntil = DateTime.parse(data['preferenceActiveUntil']);
+      if (data['preferenceActiveUntil'] != null && 
+          data['preferenceActiveUntil'].toString() != 'null') {
+        try {
+          activeUntil = DateTime.parse(data['preferenceActiveUntil'].toString());
+        } catch (e) {
+          debugPrint('날짜 파싱 실패: $e');
+        }
       }
       
       if (activeUntil != null) {
