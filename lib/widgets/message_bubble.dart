@@ -27,9 +27,10 @@ class MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.only(right: 4.0),
               child: Text(
                 message.formattedTime,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
-                  color: Colors.grey[600],
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -42,11 +43,19 @@ class MessageBubble extends StatelessWidget {
                 vertical: 8.0,
               ),
               decoration: BoxDecoration(
-                color: message.messageBackground,
+                color: message.isFromMe 
+                  ? Colors.blue[100] 
+                  : Colors.white,
+                border: Border.all(
+                  color: message.isFromMe 
+                    ? Colors.blue[300]! 
+                    : Colors.grey[300]!,
+                  width: 1.0,
+                ),
                 borderRadius: BorderRadius.circular(16.0),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 2,
                     offset: const Offset(0, 1),
                   ),
@@ -54,7 +63,14 @@ class MessageBubble extends StatelessWidget {
               ),
               child: message.isImageMessage
                 ? _buildImageMessage()
-                : Text(message.content),
+                : Text(
+                    message.content,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
             ),
           ),
           
@@ -64,9 +80,10 @@ class MessageBubble extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4.0),
               child: Text(
                 message.formattedTime,
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
-                  color: Colors.grey[600],
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -123,7 +140,8 @@ class MessageBubble extends StatelessWidget {
           '이미지를 클릭하면 원본을 볼 수 있습니다',
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey,
+            color: Colors.black54,
+            fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,
         ),

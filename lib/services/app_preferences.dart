@@ -13,7 +13,7 @@ class AppPreferences {
   static set clientId(String value) => _prefs.setString('clientId', value);
   
   // 서버 URL
-  static String get serverUrl => _prefs.getString('serverUrl') ?? 'http://111.111.111.113:5115';
+  static String get serverUrl => 'http://192.168.45.239:5115';
   static set serverUrl(String value) => _prefs.setString('serverUrl', value);
   
   // 위치 정보

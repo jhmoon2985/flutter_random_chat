@@ -20,13 +20,20 @@ class SystemMessage extends StatelessWidget {
             vertical: 8.0,
           ),
           decoration: BoxDecoration(
-            color: Colors.grey[300],
+            color: Colors.amber[100],
+            border: Border.all(
+              color: Colors.amber[300]!,
+              width: 1.0,
+            ),
             borderRadius: BorderRadius.circular(16.0),
           ),
           child: Text(
             message.content,
             style: const TextStyle(
+              fontSize: 13,
               fontStyle: FontStyle.italic,
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
             ),
             textAlign: TextAlign.center,
           ),

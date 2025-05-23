@@ -88,21 +88,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // 로고 이미지 (에셋으로 추가해야 합니다)
-              const SizedBox(
+              SizedBox(
                 width: 200,
                 height: 200,
-                child: Placeholder(
-                  color: Colors.white54,
-                  strokeWidth: 2,
-                  fallbackHeight: 200,
-                  fallbackWidth: 200,
+                child: Image.asset(
+                  'assets/images/chat_logo.png',
+                  width: 200,
+                  height: 200,
                 ),
-                // 실제 구현 시 아래 코드 사용
-                // Image.asset(
-                //   'assets/images/chat_logo.png',
-                //   width: 200,
-                //   height: 200,
-                // ),
               ),
               const SizedBox(height: 20),
               Text(
