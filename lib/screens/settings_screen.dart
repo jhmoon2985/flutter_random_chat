@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_random_chat/services/app_preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -43,7 +44,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           // 기타 설정
           _buildSectionHeader('기타'),
-          _buildServerUrlSetting(),
           _buildCacheClean(),
           _buildAppReset(),
         ],
@@ -139,18 +139,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('서비스 이용약관'),
         trailing: const Icon(Icons.arrow_forward_ios),
         onTap: _showTermsOfService,
-      ),
-    );
-  }
-
-  Widget _buildServerUrlSetting() {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.dns),
-        title: const Text('서버 설정'),
-        subtitle: Text(AppPreferences.serverUrl),
-        trailing: const Icon(Icons.arrow_forward_ios),
-        onTap: _showServerUrlDialog,
       ),
     );
   }
@@ -397,10 +385,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('취소'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: 실제 캐시 삭제 로직 구현
-              _showSnackBar('캐시가 삭제되었습니다.');
+              
+              // 실제 캐시 삭제 로직
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                // 캐시 관련 키만 삭제 (사용자 설정은 유지)
+                final keys = prefs.getKeys();
+                for (String key in keys) {
+                  if (key.startsWith('cache_') || key.startsWith('image_cache_')) {
+                    await prefs.remove(key);
+                  }
+                }
+                
+                _showSnackBar('캐시가 삭제되었습니다.');
+              } catch (e) {
+                _showSnackBar('캐시 삭제 중 오류가 발생했습니다.');
+              }
             },
             child: const Text('삭제'),
           ),
@@ -423,8 +425,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              // TODO: SharedPreferences 초기화 로직
-              _showSnackBar('앱이 초기화되었습니다. 앱을 재시작해주세요.');
+              
+              try {
+                // SharedPreferences 완전 초기화
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+                
+                _showSnackBar('앱이 초기화되었습니다. 앱을 재시작해주세요.');
+              } catch (e) {
+                _showSnackBar('초기화 중 오류가 발생했습니다.');
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('초기화', style: TextStyle(color: Colors.white)),

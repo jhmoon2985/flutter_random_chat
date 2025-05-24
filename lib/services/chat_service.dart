@@ -152,11 +152,7 @@ class ChatService extends ChangeNotifier {
     AppPreferences.preferenceActiveUntil = 0;
     _stopPreferenceTimer();
     
-    _messages.add(ChatMessage(
-      content: '선호도 설정이 만료되었습니다. 이제 모든 조건으로 매칭됩니다.',
-      isFromMe: false,
-      isSystemMessage: true,
-    ));
+    // 시스템 메시지 제거됨
     
     notifyListeners();
   }
@@ -376,6 +372,17 @@ class ChatService extends ChangeNotifier {
     
     try {
       _matchStatus = '매칭 대기열에 참가 중...';
+      
+      // 기존 메시지 중 시스템 메시지만 제거하고 일반 채팅 메시지는 유지
+      _messages.removeWhere((message) => message.isSystemMessage);
+      
+      // 매칭 중 메시지 추가
+      _messages.add(ChatMessage(
+        content: '새로운 상대방과 연결 중입니다...',
+        isFromMe: false,
+        isSystemMessage: true,
+      ));
+      
       notifyListeners();
       
       await _safeInvokeVoid('JoinWaitingQueue', args: [
@@ -399,20 +406,12 @@ class ChatService extends ChangeNotifier {
     try {
       await _safeInvokeVoid('EndChat');
       
-      _messages.add(ChatMessage(
-        content: '대화를 종료하고 새로운 상대를 찾습니다.',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
+      // 시스템 메시지 제거됨
       
       notifyListeners();
     } catch (e) {
       debugPrint('대화 종료 실패: $e');
-      _messages.add(ChatMessage(
-        content: '대화 종료 중 오류가 발생했습니다: $e',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
+      // 오류 메시지도 제거됨
       notifyListeners();
     }
   }
@@ -425,11 +424,7 @@ class ChatService extends ChangeNotifier {
       await _safeInvokeVoid('SendMessage', args: [message]);
     } catch (e) {
       debugPrint('메시지 전송 실패: $e');
-      _messages.add(ChatMessage(
-        content: '메시지 전송 실패: $e',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
+      // 오류 메시지 제거됨
       notifyListeners();
       rethrow;
     }
@@ -440,12 +435,7 @@ class ChatService extends ChangeNotifier {
     if (!_isConnectionValid || !_isMatched) return;
     
     try {
-      _messages.add(ChatMessage(
-        content: '이미지 업로드 중...',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
-      notifyListeners();
+      // 업로드 중 메시지 제거됨
       
       final request = http.MultipartRequest(
         'POST',
@@ -472,19 +462,10 @@ class ChatService extends ChangeNotifier {
         throw Exception('이미지 업로드 실패: ${response.body}');
       }
       
-      _messages.add(ChatMessage(
-        content: '이미지를 전송했습니다.',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
-      notifyListeners();
+      // 성공 메시지도 제거됨
+      
     } catch (e) {
-      _messages.add(ChatMessage(
-        content: '이미지 전송 실패: $e',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
-      notifyListeners();
+      // 오류 메시지 제거됨
       rethrow;
     }
   }
@@ -546,22 +527,12 @@ class ChatService extends ChangeNotifier {
       if (position != null) {
         await updateLocation(position.latitude, position.longitude);
         
-        String locationStatus = await LocationService.getLocationStatus();
-        _messages.add(ChatMessage(
-          content: '위치가 업데이트되었습니다: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)} ($locationStatus)',
-          isFromMe: false,
-          isSystemMessage: true,
-        ));
-        notifyListeners();
+        // 위치 업데이트 시스템 메시지 제거됨
+        
       }
     } catch (e) {
       debugPrint('위치 새로고침 실패: $e');
-      _messages.add(ChatMessage(
-        content: '위치 업데이트 실패: $e',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
-      notifyListeners();
+      // 오류 메시지 제거됨
     }
   }
   
@@ -625,13 +596,7 @@ class ChatService extends ChangeNotifier {
       _connectionStatus = '연결 끊김';
       _matchStatus = '매칭 없음';
       
-      if (error != null) {
-        _messages.add(ChatMessage(
-          content: '서버 연결이 끊어졌습니다. 다시 연결을 시도해주세요.',
-          isFromMe: false,
-          isSystemMessage: true,
-        ));
-      }
+      // 연결 끊김 시스템 메시지 제거됨
       
       notifyListeners();
     });
@@ -642,11 +607,7 @@ class ChatService extends ChangeNotifier {
       _isConnected = true;
       _connectionStatus = '재연결됨';
       
-      _messages.add(ChatMessage(
-        content: '서버에 재연결되었습니다.',
-        isFromMe: false,
-        isSystemMessage: true,
-      ));
+      // 재연결 시스템 메시지 제거됨
       
       notifyListeners();
       
@@ -926,11 +887,7 @@ class ChatService extends ChangeNotifier {
   
   // 선호도 업데이트 핸들러
   void _handlePreferencesUpdated(List<Object?>? args) {
-    _messages.add(ChatMessage(
-      content: '매칭 선호도가 서버에 저장되었습니다.',
-      isFromMe: false,
-      isSystemMessage: true,
-    ));
+    // 선호도 업데이트 시스템 메시지 제거됨
     
     notifyListeners();
   }
@@ -965,19 +922,11 @@ class ChatService extends ChangeNotifier {
       
       if (activeUntil != null) {
         _preferenceActiveUntil = activeUntil;
-        _messages.add(ChatMessage(
-          content: '포인트가 차감되어 선호도 설정이 10분간 활성화되었습니다. 남은 포인트: $_points P',
-          isFromMe: false,
-          isSystemMessage: true,
-        ));
+        // 포인트 차감 및 선호도 활성화 시스템 메시지 제거됨
         // 선호도 활성화 타이머 시작
         _startPreferenceTimer();
       } else {
-        _messages.add(ChatMessage(
-          content: '포인트가 업데이트 되었습니다. 현재 포인트: $_points P',
-          isFromMe: false,
-          isSystemMessage: true,
-        ));
+        // 포인트 업데이트 시스템 메시지 제거됨
       }
       
       AppPreferences.points = _points;

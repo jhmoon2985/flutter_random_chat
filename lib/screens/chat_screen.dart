@@ -428,7 +428,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // 상태 정보
+            // 선호도 활성화 시간 및 포인트 표시
             _buildStatusBar(),
             
             // 채팅 메시지 리스트 - Expanded 사용하여 남은 공간 모두 차지
@@ -493,102 +493,93 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildStatusBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-      color: Colors.white,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[300]!, width: 1),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          // 포인트 표시
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.chatService.connectionStatus,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      widget.chatService.matchStatus,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 2),
-                    FutureBuilder<String>(
-                      future: LocationService.getLocationStatus(),
-                      builder: (context, snapshot) {
-                        return Text(
-                          "위치 상태: ${snapshot.data ?? '확인 중...'}",
-                          style: TextStyle(
-                            fontSize: 10, 
-                            color: LocationService.hasRealGPS ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      "위치: ${widget.chatService.latitude.toStringAsFixed(4)}, ${widget.chatService.longitude.toStringAsFixed(4)}",
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      "포인트: ${widget.chatService.points}P",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).primaryColor,
-                      ),
-                    ),
-                    if (widget.chatService.isPreferenceActive) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.chatService.preferenceStatusText,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ],
+              Icon(
+                Icons.account_balance_wallet,
+                color: Theme.of(context).primaryColor,
+                size: 20,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '${widget.chatService.points} P',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).primaryColor,
                 ),
               ),
-              Column(
+            ],
+          ),
+          
+          // 선호도 활성화 시간 표시
+          if (widget.chatService.isPreferenceActive)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.green, width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
-                    width: 70,
-                    height: 32,
-                    child: ElevatedButton(
-                      onPressed: _connectOrDisconnect,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.blue,
-                      ),
-                      child: Text(widget.chatService.isConnected ? '연결해제' : '연결'),
-                    ),
+                  const Icon(
+                    Icons.timer,
+                    color: Colors.green,
+                    size: 16,
                   ),
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    width: 70,
-                    height: 32,
-                    child: OutlinedButton(
-                      onPressed: _openPreferenceDialog,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.black, width: 1.5),
-                      ),
-                      child: const Text('선호도'),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.chatService.preferenceStatusText.replaceAll('선호도 설정 활성화: ', ''),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
               ),
-            ],
-          ),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey, width: 1),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.timer_off,
+                    color: Colors.grey,
+                    size: 16,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    '선호도 비활성화',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
