@@ -45,7 +45,7 @@ class _PreferenceDialogState extends State<PreferenceDialog> {
     return Dialog(
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.7, // 높이를 85%에서 70%로 줄임
+          maxHeight: MediaQuery.of(context).size.height * 0.79, // 높이를 65%에서 85%로 늘림
           maxWidth: MediaQuery.of(context).size.width * 0.9,
         ),
         child: Column(
