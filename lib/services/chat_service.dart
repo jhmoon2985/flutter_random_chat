@@ -4,8 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_random_chat/models/chat_message.dart';
 import 'package:flutter_random_chat/services/app_preferences.dart';
+import 'package:flutter_random_chat/services/location_service.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:signalr_netcore/signalr_client.dart';
+import 'dart:async';
 
 class ChatService extends ChangeNotifier {
   // 허브 연결
@@ -13,6 +16,9 @@ class ChatService extends ChangeNotifier {
   
   // HTTP 클라이언트
   final http.Client _httpClient = http.Client();
+  
+  // 위치 스트림 구독
+  StreamSubscription<Position>? _locationSubscription;
   
   // 상태 정보
   String _serverUrl = AppPreferences.serverUrl;
@@ -83,8 +89,8 @@ class ChatService extends ChangeNotifier {
     AppPreferences.serverUrl = serverUrl;
     
     // 위치 정보 초기화
-    _latitude = AppPreferences.latitude;
-    _longitude = AppPreferences.longitude;
+    await _initializeLocation();
+    
     _preferredGenderValue = AppPreferences.preferredGender;
     _maxDistance = AppPreferences.maxDistance;
     
@@ -100,6 +106,70 @@ class ChatService extends ChangeNotifier {
         _preferenceActiveUntil = null;
         AppPreferences.preferenceActiveUntil = 0;
       }
+    }
+    
+    // 위치 변경 감지 시작
+    _startLocationTracking();
+  }
+  
+  // 위치 정보 초기화
+  Future<void> _initializeLocation() async {
+    try {
+      // 현재 위치 가져오기 시도
+      Position? position = await LocationService.getCurrentLocation();
+      if (position != null) {
+        _latitude = position.latitude;
+        _longitude = position.longitude;
+        debugPrint('현재 위치로 초기화: $_latitude, $_longitude');
+      } else {
+        // 위치를 가져올 수 없는 경우 저장된 위치 사용
+        _latitude = AppPreferences.latitude;
+        _longitude = AppPreferences.longitude;
+        debugPrint('저장된 위치 사용: $_latitude, $_longitude');
+      }
+    } catch (e) {
+      debugPrint('위치 초기화 실패: $e');
+      // 기본값 사용
+      _latitude = AppPreferences.latitude;
+      _longitude = AppPreferences.longitude;
+    }
+  }
+  
+  // 위치 추적 시작
+  void _startLocationTracking() {
+    try {
+      LocationService.startLocationTracking((Position position) {
+        _updateLocationIfNeeded(position);
+      });
+    } catch (e) {
+      debugPrint('위치 추적 시작 실패: $e');
+    }
+  }
+  
+  // 필요시 위치 업데이트
+  void _updateLocationIfNeeded(Position newPosition) {
+    // 이전 위치와 50미터 이상 차이날 때만 업데이트
+    double distance = LocationService.calculateDistance(
+      _latitude, _longitude,
+      newPosition.latitude, newPosition.longitude,
+    );
+    
+    if (distance > 50) { // 50미터 이상 이동시
+      _latitude = newPosition.latitude;
+      _longitude = newPosition.longitude;
+      
+      // 앱 설정에 저장
+      AppPreferences.latitude = _latitude;
+      AppPreferences.longitude = _longitude;
+      
+      debugPrint('위치 업데이트: $_latitude, $_longitude (이동거리: ${distance.toStringAsFixed(1)}m)');
+      
+      // 서버에 위치 업데이트 전송
+      if (_isConnectionValid) {
+        updateLocation(_latitude, _longitude);
+      }
+      
+      notifyListeners();
     }
   }
   
@@ -158,6 +228,9 @@ class ChatService extends ChangeNotifier {
   
   // 연결 해제
   Future<void> disconnect() async {
+    // 위치 추적 중단
+    await LocationService.stopLocationTracking();
+    
     if (_hubConnection != null) {
       try {
         debugPrint('연결 해제 시도');
@@ -407,9 +480,36 @@ class ChatService extends ChangeNotifier {
       AppPreferences.latitude = latitude;
       AppPreferences.longitude = longitude;
       
+      debugPrint('서버에 위치 업데이트 전송: $latitude, $longitude');
       notifyListeners();
     } catch (e) {
       debugPrint('위치 업데이트 실패: $e');
+    }
+  }
+  
+  // 수동 위치 새로고침
+  Future<void> refreshLocation() async {
+    try {
+      Position? position = await LocationService.getCurrentLocation();
+      if (position != null) {
+        await updateLocation(position.latitude, position.longitude);
+        
+        String locationStatus = await LocationService.getLocationStatus();
+        _messages.add(ChatMessage(
+          content: '위치가 업데이트되었습니다: ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)} ($locationStatus)',
+          isFromMe: false,
+          isSystemMessage: true,
+        ));
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('위치 새로고침 실패: $e');
+      _messages.add(ChatMessage(
+        content: '위치 업데이트 실패: $e',
+        isFromMe: false,
+        isSystemMessage: true,
+      ));
+      notifyListeners();
     }
   }
   
@@ -500,6 +600,9 @@ class ChatService extends ChangeNotifier {
       _registerClient().catchError((e) {
         debugPrint('재연결 후 등록 실패: $e');
       });
+      
+      // 재연결 후 위치 추적 재시작
+      _startLocationTracking();
     });
   }
   
@@ -828,5 +931,11 @@ class ChatService extends ChangeNotifier {
     } catch (e) {
       debugPrint('포인트 업데이트 처리 실패: $e');
     }
+  }
+  
+  @override
+  void dispose() {
+    LocationService.dispose();
+    super.dispose();
   }
 }

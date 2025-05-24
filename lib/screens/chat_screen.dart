@@ -5,6 +5,7 @@ import 'package:flutter_random_chat/screens/image_viewer_screen.dart';
 import 'package:flutter_random_chat/screens/store_screen.dart';
 import 'package:flutter_random_chat/services/chat_service.dart';
 import 'package:flutter_random_chat/services/app_preferences.dart';
+import 'package:flutter_random_chat/services/location_service.dart';
 import 'package:flutter_random_chat/widgets/message_bubble.dart';
 import 'package:flutter_random_chat/widgets/system_message.dart';
 import 'package:image_picker/image_picker.dart';
@@ -294,6 +295,102 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // 위치 새로고침
+  Future<void> _refreshLocation() async {
+    try {
+      await widget.chatService.refreshLocation();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('위치가 새로고침되었습니다')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('위치 새로고침 실패: $e')),
+        );
+      }
+    }
+  }
+
+  // 수동 위치 설정 다이얼로그
+  Future<void> _showManualLocationDialog() async {
+    final TextEditingController latController = TextEditingController();
+    final TextEditingController lonController = TextEditingController();
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('수동 위치 설정'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('테스트용 위치를 수동으로 설정할 수 있습니다.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: latController,
+              decoration: const InputDecoration(
+                labelText: '위도 (Latitude)',
+                hintText: '37.5665',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: lonController,
+              decoration: const InputDecoration(
+                labelText: '경도 (Longitude)', 
+                hintText: '126.9780',
+              ),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final lat = double.tryParse(latController.text);
+              final lon = double.tryParse(lonController.text);
+              if (lat != null && lon != null) {
+                Navigator.of(context).pop(true);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('올바른 숫자를 입력해주세요')),
+                );
+              }
+            },
+            child: const Text('설정'),
+          ),
+        ],
+      ),
+    );
+    
+    if (result == true) {
+      final lat = double.parse(latController.text);
+      final lon = double.parse(lonController.text);
+      
+      try {
+        await LocationService.setManualLocation(lat, lon);
+        await widget.chatService.refreshLocation();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('위치가 설정되었습니다: ${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('위치 설정 실패: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -302,6 +399,41 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: const Text('Random Chat'),
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.my_location),
+            onSelected: (value) {
+              switch (value) {
+                case 'refresh':
+                  _refreshLocation();
+                  break;
+                case 'manual':
+                  _showManualLocationDialog();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh),
+                    SizedBox(width: 8),
+                    Text('위치 새로고침'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'manual',
+                child: Row(
+                  children: [
+                    Icon(Icons.edit_location),
+                    SizedBox(width: 8),
+                    Text('수동 위치 설정'),
+                  ],
+                ),
+              ),
+            ],
+          ),
           IconButton(
             icon: Icon(_showSettings ? Icons.settings_outlined : Icons.settings),
             onPressed: () => setState(() => _showSettings = !_showSettings),
@@ -400,7 +532,25 @@ class _ChatScreenState extends State<ChatScreen> {
                       style: const TextStyle(fontSize: 12),
                     ),
                     const SizedBox(height: 2),
-
+                    FutureBuilder<String>(
+                      future: LocationService.getLocationStatus(),
+                      builder: (context, snapshot) {
+                        return Text(
+                          "위치 상태: ${snapshot.data ?? '확인 중...'}",
+                          style: TextStyle(
+                            fontSize: 10, 
+                            color: LocationService.hasRealGPS ? Colors.green : Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      "위치: ${widget.chatService.latitude.toStringAsFixed(4)}, ${widget.chatService.longitude.toStringAsFixed(4)}",
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
                       "포인트: ${widget.chatService.points}P",
                       style: TextStyle(
