@@ -436,7 +436,20 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           IconButton(
             icon: Icon(_showSettings ? Icons.settings_outlined : Icons.settings),
-            onPressed: () => setState(() => _showSettings = !_showSettings),
+            onPressed: () {
+              // 설정 패널을 토글할 때 키보드 숨기기
+              if (!_showSettings) {
+                _messageFocusNode.unfocus();
+                // 키보드가 내려가는 시간을 기다린 후 설정 패널 표시
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted) {
+                    setState(() => _showSettings = true);
+                  }
+                });
+              } else {
+                setState(() => _showSettings = false);
+              }
+            },
           ),
         ],
       ),
@@ -446,11 +459,17 @@ class _ChatScreenState extends State<ChatScreen> {
             // 상태 정보
             _buildStatusBar(),
             
-            // 설정 패널
-            if (_showSettings) _buildSettingsPanel(),
+            // 설정 패널 - SingleChildScrollView로 감싸기
+            if (_showSettings) 
+              Flexible(
+                flex: 0,
+                child: SingleChildScrollView(
+                  child: _buildSettingsPanel(),
+                ),
+              ),
             
-            // 채팅 메시지 리스트 (Flexible 사용으로 overflow 방지)
-            Flexible(
+            // 채팅 메시지 리스트 - Expanded 사용하여 남은 공간 모두 차지
+            Expanded(
               child: Container(
                 color: Colors.grey[50],
                 child: ListView.builder(
@@ -475,33 +494,34 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             
-            // 재연결 버튼 (축소하여 공간 절약)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-              child: SizedBox(
-                height: 36,
-                child: ElevatedButton(
-                  onPressed: widget.chatService.isConnected 
-                    ? _rematchOrEndChat 
-                    : null,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+            // 재연결 버튼 (설정 패널이 열려있을 때는 숨기기)
+            if (!_showSettings)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                child: SizedBox(
+                  height: 36,
+                  child: ElevatedButton(
+                    onPressed: widget.chatService.isConnected 
+                      ? _rematchOrEndChat 
+                      : null,
+                    style: ElevatedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.blue,
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.blue,
-                  ),
-                  child: Text(
-                    widget.chatService.isMatched ? '재연결' : '연결',
-                    style: const TextStyle(fontSize: 14),
+                    child: Text(
+                      widget.chatService.isMatched ? '재연결' : '연결',
+                      style: const TextStyle(fontSize: 14),
+                    ),
                   ),
                 ),
               ),
-            ),
             
-            // 메시지 입력 (키보드 safe area 적용)
+            // 메시지 입력
             _buildMessageInput(),
           ],
         ),
@@ -593,7 +613,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     width: 70,
                     height: 32,
                     child: OutlinedButton(
-                      onPressed: () => setState(() => _showSettings = !_showSettings),
+                      onPressed: () {
+                        if (!_showSettings) {
+                          _messageFocusNode.unfocus();
+                          Future.delayed(const Duration(milliseconds: 300), () {
+                            if (mounted) {
+                              setState(() => _showSettings = true);
+                            }
+                          });
+                        } else {
+                          setState(() => _showSettings = false);
+                        }
+                      },
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
@@ -618,7 +649,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: const Text('상점'),
                     ),
                   ),
-
                 ],
               ),
             ],
@@ -635,156 +665,168 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const SizedBox(width: 80, child: Text('서버 URL:', style: TextStyle(fontSize: 12))),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: TextEditingController(
-                      text: widget.chatService.serverUrl,
-                    ),
-                    enabled: !widget.chatService.isConnected,
-                    style: const TextStyle(fontSize: 12),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.all(8),
-                    ),
-                    onChanged: (value) {
-                      AppPreferences.serverUrl = value;
-                    },
-                  ),
+          // 서버 URL 설정
+          _buildCompactSettingRow(
+            '서버 URL:',
+            SizedBox(
+              height: 36,
+              child: TextField(
+                controller: TextEditingController(
+                  text: widget.chatService.serverUrl,
                 ),
+                enabled: !widget.chatService.isConnected,
+                style: const TextStyle(fontSize: 12),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(8),
+                ),
+                onChanged: (value) {
+                  AppPreferences.serverUrl = value;
+                },
               ),
-            ],
+            ),
           ),
+          
           const SizedBox(height: 8),
-          Row(
-            children: [
-              const SizedBox(width: 80, child: Text('내 성별:', style: TextStyle(fontSize: 12))),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedGender,
-                    style: const TextStyle(fontSize: 12, color: Colors.black),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.all(8),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'male', child: Text('남성', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'female', child: Text('여성', style: TextStyle(fontSize: 12))),
-                    ],
-                    onChanged: !widget.chatService.isConnected
-                      ? (value) {
-                          if (value != null) {
-                            setState(() => _selectedGender = value);
-                            AppPreferences.gender = value;
-                          }
-                        }
-                      : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const SizedBox(width: 80, child: Text('선호 성별:', style: TextStyle(fontSize: 12))),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: DropdownButtonFormField<String>(
-                    value: _selectedPreferredGender,
-                    style: const TextStyle(fontSize: 12, color: Colors.black),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.all(8),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'any', child: Text('제한 없음', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'male', child: Text('남성만', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 'female', child: Text('여성만', style: TextStyle(fontSize: 12))),
-                    ],
-                    onChanged: widget.chatService.canChangePreference
-                      ? (value) {
-                          if (value != null) {
-                            setState(() => _selectedPreferredGender = value);
-                          }
-                        }
-                      : null,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const SizedBox(width: 60, child: Text('최대 거리:', style: TextStyle(fontSize: 12))),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: DropdownButtonFormField<int>(
-                    value: _selectedMaxDistance,
-                    style: const TextStyle(fontSize: 12, color: Colors.black),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.all(8),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 5, child: Text('5 km', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 25, child: Text('25 km', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 50, child: Text('50 km', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 100, child: Text('100 km', style: TextStyle(fontSize: 12))),
-                      DropdownMenuItem(value: 10000, child: Text('제한 없음', style: TextStyle(fontSize: 12))),
-                    ],
-                    onChanged: widget.chatService.canChangePreference
-                      ? (value) {
-                          if (value != null) {
-                            setState(() => _selectedMaxDistance = value);
-                          }
-                        }
-                      : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          
+          // 성별 설정 (한 줄로)
           Row(
             children: [
               Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: ElevatedButton(
-                    onPressed: widget.chatService.canSavePreferences
-                      ? _savePreferences
-                      : null,
-                    style: ElevatedButton.styleFrom(
-                      textStyle: const TextStyle(fontSize: 12),
+                child: _buildCompactSettingRow(
+                  '내 성별:',
+                  SizedBox(
+                    height: 36,
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedGender,
+                      style: const TextStyle(fontSize: 12, color: Colors.black),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(8),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'male', child: Text('남성', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'female', child: Text('여성', style: TextStyle(fontSize: 12))),
+                      ],
+                      onChanged: !widget.chatService.isConnected
+                        ? (value) {
+                            if (value != null) {
+                              setState(() => _selectedGender = value);
+                              AppPreferences.gender = value;
+                            }
+                          }
+                        : null,
                     ),
-                    child: const Text('매칭 설정 저장'),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: ElevatedButton(
-                    onPressed: widget.chatService.canActivatePreference
-                      ? _activatePreference
-                      : null,
-                    style: ElevatedButton.styleFrom(
-                      textStyle: const TextStyle(fontSize: 12),
+                child: _buildCompactSettingRow(
+                  '선호 성별:',
+                  SizedBox(
+                    height: 36,
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedPreferredGender,
+                      style: const TextStyle(fontSize: 12, color: Colors.black),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(8),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'any', child: Text('제한없음', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'male', child: Text('남성만', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'female', child: Text('여성만', style: TextStyle(fontSize: 12))),
+                      ],
+                      onChanged: widget.chatService.canChangePreference
+                        ? (value) {
+                            if (value != null) {
+                              setState(() => _selectedPreferredGender = value);
+                            }
+                          }
+                        : null,
                     ),
-                    child: const Text('선호도 활성화 (1000P)'),
                   ),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 8),
+          
+          // 거리 설정과 버튼들
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: _buildCompactSettingRow(
+                  '최대 거리:',
+                  SizedBox(
+                    height: 36,
+                    child: DropdownButtonFormField<int>(
+                      value: _selectedMaxDistance,
+                      style: const TextStyle(fontSize: 12, color: Colors.black),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.all(8),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 5, child: Text('5km', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 25, child: Text('25km', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 50, child: Text('50km', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 100, child: Text('100km', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 10000, child: Text('제한없음', style: TextStyle(fontSize: 12))),
+                      ],
+                      onChanged: widget.chatService.canChangePreference
+                        ? (value) {
+                            if (value != null) {
+                              setState(() => _selectedMaxDistance = value);
+                            }
+                          }
+                        : null,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 32,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: widget.chatService.canSavePreferences
+                          ? _savePreferences
+                          : null,
+                        style: ElevatedButton.styleFrom(
+                          textStyle: const TextStyle(fontSize: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Text('설정 저장'),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 32,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: widget.chatService.canActivatePreference
+                          ? _activatePreference
+                          : null,
+                        style: ElevatedButton.styleFrom(
+                          textStyle: const TextStyle(fontSize: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: const Text('활성화(1000P)'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -794,22 +836,33 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // 컴팩트한 설정 행을 만드는 헬퍼 위젯
+  Widget _buildCompactSettingRow(String label, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label, 
+          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        child,
+      ],
+    );
+  }
+
+  // 메시지 입력창
   Widget _buildMessageInput() {
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        8.0,
-        8.0,
-        8.0,
-        8.0 + MediaQuery.of(context).viewInsets.bottom * 0.1, // 키보드 높이 고려
-      ),
+      padding: const EdgeInsets.fromLTRB(8.0, 8.0, 8.0, 8.0),
       color: Colors.white,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxHeight: 100, // 최대 높이 제한으로 overflow 방지
+              constraints: BoxConstraints(
+                maxHeight: _showSettings ? 60 : 100, // 설정 패널이 열려있을 때 높이 제한
               ),
               child: TextField(
                 controller: _messageController,
@@ -821,7 +874,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   isDense: true,
                 ),
-                maxLines: null, // 여러 줄 입력 허용
+                maxLines: _showSettings ? 1 : null, // 설정 패널이 열려있을 때 한 줄로 제한
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _sendMessage(),
               ),
