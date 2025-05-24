@@ -135,6 +135,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (widget.chatService.isMatched) {
         await widget.chatService.endChat();
       } else {
+        // 재연결 시 자동으로 위치 업데이트
+        await widget.chatService.refreshLocation();
         await widget.chatService.joinQueue();
       }
     } catch (e) {
@@ -435,6 +437,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ],
           ),
           IconButton(
+            icon: const Icon(Icons.store),
+            onPressed: _openStore,
+            tooltip: '상점',
+          ),
+          IconButton(
             icon: Icon(_showSettings ? Icons.settings_outlined : Icons.settings),
             onPressed: () {
               // 설정 패널을 토글할 때 키보드 숨기기
@@ -450,6 +457,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 setState(() => _showSettings = false);
               }
             },
+            tooltip: '설정',
           ),
         ],
       ),
@@ -632,21 +640,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         side: const BorderSide(color: Colors.black, width: 1.5),
                       ),
                       child: const Text('설정'),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  SizedBox(
-                    width: 70,
-                    height: 32,
-                    child: OutlinedButton(
-                      onPressed: _openStore,
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.black, width: 1.5),
-                      ),
-                      child: const Text('상점'),
                     ),
                   ),
                 ],
