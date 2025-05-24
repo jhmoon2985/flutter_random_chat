@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_random_chat/models/chat_message.dart';
 import 'package:flutter_random_chat/screens/image_viewer_screen.dart';
 import 'package:flutter_random_chat/screens/store_screen.dart';
 import 'package:flutter_random_chat/screens/settings_screen.dart';
@@ -45,13 +46,22 @@ class _ChatScreenState extends State<ChatScreen> {
   }
   
   void _setupChatServiceListeners() {
-    // 메시지 추가됐을 때 스크롤 이동
-    widget.chatService.addListener(_scrollToBottom);
-    
-    // 상태 변경시 화면 갱신
-    widget.chatService.addListener(() {
-      if (mounted) setState(() {});
-    });
+    // 상태 변경시 화면 갱신 (선호도 시간 업데이트 포함)
+    widget.chatService.addListener(_onChatServiceChanged);
+  }
+  
+  void _onChatServiceChanged() {
+    if (mounted) {
+      setState(() {
+        // ChatService의 모든 상태 변경을 감지하여 UI 업데이트
+        // 선호도 시간, 메시지, 연결 상태 등 모든 변경사항 반영
+      });
+      
+      // 메시지가 추가되었을 때 스크롤 이동
+      if (widget.chatService.messages.isNotEmpty) {
+        _scrollToBottom();
+      }
+    }
   }
   
   void _setupKeyboardListener() {
@@ -86,7 +96,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _messageFocusNode.dispose();
-    widget.chatService.removeListener(_scrollToBottom);
+    widget.chatService.removeListener(_onChatServiceChanged);
     super.dispose();
   }
 
@@ -227,14 +237,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // 선호도 설정 다이얼로그 열기
   void _openPreferenceDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => PreferenceDialog(
-        chatService: widget.chatService,
-      ),
-    ).then((_) {
-      // 다이얼로그 닫힌 후 화면 새로고침
-      if (mounted) setState(() {});
+    // 키보드가 열려있으면 먼저 닫기
+    FocusScope.of(context).unfocus();
+    
+    // 키보드가 완전히 닫힐 때까지 잠시 대기
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => PreferenceDialog(
+            chatService: widget.chatService,
+          ),
+        ).then((_) {
+          // 다이얼로그 닫힌 후 화면 새로고침
+          if (mounted) setState(() {});
+        });
+      }
     });
   }
 

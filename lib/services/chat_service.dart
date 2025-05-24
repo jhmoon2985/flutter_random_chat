@@ -20,6 +20,9 @@ class ChatService extends ChangeNotifier {
   // 위치 스트림 구독
   StreamSubscription<Position>? _locationSubscription;
   
+  // 선호도 활성화 시간 업데이트 타이머
+  Timer? _preferenceTimer;
+  
   // 상태 정보
   String _serverUrl = AppPreferences.serverUrl;
   String? _clientId;
@@ -63,7 +66,10 @@ class ChatService extends ChangeNotifier {
     if (!isPreferenceActive) return '';
     
     final timeLeft = _preferenceActiveUntil!.difference(DateTime.now());
-    return '선호도 설정 활성화: ${timeLeft.inMinutes}분 ${timeLeft.inSeconds % 60}초 남음';
+    final minutes = timeLeft.inMinutes;
+    final seconds = timeLeft.inSeconds % 60;
+    
+    return '선호도 설정 활성화: ${minutes}분 ${seconds}초';
   }
   
   bool get canChangePreference => 
@@ -105,11 +111,54 @@ class ChatService extends ChangeNotifier {
       if (!isPreferenceActive) {
         _preferenceActiveUntil = null;
         AppPreferences.preferenceActiveUntil = 0;
+      } else {
+        // 선호도가 활성화되어 있으면 타이머 시작
+        _startPreferenceTimer();
       }
     }
     
     // 위치 변경 감지 시작
     _startLocationTracking();
+  }
+  
+  // 선호도 타이머 시작
+  void _startPreferenceTimer() {
+    _stopPreferenceTimer(); // 기존 타이머가 있다면 중지
+    
+    if (!isPreferenceActive) return;
+    
+    // 매초마다 업데이트
+    _preferenceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!isPreferenceActive) {
+        // 선호도 시간이 만료되면 타이머 중지 및 상태 업데이트
+        _onPreferenceExpired();
+        timer.cancel();
+      } else {
+        // UI 업데이트를 위해 notifyListeners 호출
+        notifyListeners();
+      }
+    });
+  }
+  
+  // 선호도 타이머 중지
+  void _stopPreferenceTimer() {
+    _preferenceTimer?.cancel();
+    _preferenceTimer = null;
+  }
+  
+  // 선호도 만료 처리
+  void _onPreferenceExpired() {
+    _preferenceActiveUntil = null;
+    AppPreferences.preferenceActiveUntil = 0;
+    _stopPreferenceTimer();
+    
+    _messages.add(ChatMessage(
+      content: '선호도 설정이 만료되었습니다. 이제 모든 조건으로 매칭됩니다.',
+      isFromMe: false,
+      isSystemMessage: true,
+    ));
+    
+    notifyListeners();
   }
   
   // 위치 정보 초기화
@@ -230,6 +279,9 @@ class ChatService extends ChangeNotifier {
   Future<void> disconnect() async {
     // 위치 추적 중단
     await LocationService.stopLocationTracking();
+    
+    // 선호도 타이머 중지
+    _stopPreferenceTimer();
     
     if (_hubConnection != null) {
       try {
@@ -538,6 +590,8 @@ class ChatService extends ChangeNotifier {
       
       if (data['preferenceActiveUntil'] != null) {
         _preferenceActiveUntil = DateTime.parse(data['preferenceActiveUntil']);
+        // 선호도 활성화 타이머 시작
+        _startPreferenceTimer();
       }
       
       AppPreferences.points = _points;
@@ -705,6 +759,8 @@ class ChatService extends ChangeNotifier {
           data['preferenceActiveUntil'].toString() != 'null') {
         try {
           _preferenceActiveUntil = DateTime.parse(data['preferenceActiveUntil'].toString());
+          // 선호도 활성화 타이머 시작
+          _startPreferenceTimer();
         } catch (e) {
           debugPrint('날짜 파싱 실패: $e');
         }
@@ -914,6 +970,8 @@ class ChatService extends ChangeNotifier {
           isFromMe: false,
           isSystemMessage: true,
         ));
+        // 선호도 활성화 타이머 시작
+        _startPreferenceTimer();
       } else {
         _messages.add(ChatMessage(
           content: '포인트가 업데이트 되었습니다. 현재 포인트: $_points P',
@@ -935,6 +993,7 @@ class ChatService extends ChangeNotifier {
   
   @override
   void dispose() {
+    _stopPreferenceTimer();
     LocationService.dispose();
     super.dispose();
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_random_chat/services/app_preferences.dart';
 import 'package:flutter_random_chat/services/chat_service.dart';
@@ -18,23 +19,62 @@ class _PreferenceDialogState extends State<PreferenceDialog> {
   String _selectedPreferredGender = AppPreferences.preferredGender;
   int _selectedMaxDistance = AppPreferences.maxDistance;
   bool _isLoading = false;
+  Timer? _updateTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // 선호도 활성화 상태를 실시간으로 업데이트하기 위한 타이머
+    _updateTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {});
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.tune, color: Theme.of(context).primaryColor),
-          const SizedBox(width: 8),
-          const Text('매칭 선호도 설정'),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
+    return Dialog(
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7, // 높이를 85%에서 70%로 줄임
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 타이틀
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.tune, color: Theme.of(context).primaryColor),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      '매칭 선호도 설정',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // 스크롤 없는 컨텐츠 (Expanded 사용)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             // 현재 포인트 표시
             Container(
               padding: const EdgeInsets.all(12),
@@ -174,48 +214,63 @@ class _PreferenceDialogState extends State<PreferenceDialog> {
                 ],
               ),
             ),
+                            ],
+                ),
+              ),
+            ),
+            // 액션 버튼들 (상단 패딩 제거)
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), // 상단 패딩을 16에서 8로 줄임
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('취소'),
+                  ),
+                  
+                  const SizedBox(width: 8),
+                  
+                  // 설정 저장 버튼
+                  if (widget.chatService.canSavePreferences)
+                    TextButton(
+                      onPressed: _isLoading ? null : _savePreferences,
+                      child: _isLoading 
+                        ? const SizedBox(
+                            width: 16, 
+                            height: 16, 
+                            child: CircularProgressIndicator(strokeWidth: 2)
+                          )
+                        : const Text('저장'),
+                    ),
+                  
+                  const SizedBox(width: 8),
+                  
+                  // 활성화 버튼
+                  if (widget.chatService.canActivatePreference)
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _activatePreference,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: _isLoading 
+                        ? const SizedBox(
+                            width: 16, 
+                            height: 16, 
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2, 
+                              color: Colors.white
+                            )
+                          )
+                        : const Text('활성화 (1000P)'),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('취소'),
-        ),
-        
-        // 설정 저장 버튼
-        if (widget.chatService.canSavePreferences)
-          TextButton(
-            onPressed: _isLoading ? null : _savePreferences,
-            child: _isLoading 
-              ? const SizedBox(
-                  width: 16, 
-                  height: 16, 
-                  child: CircularProgressIndicator(strokeWidth: 2)
-                )
-              : const Text('저장'),
-          ),
-        
-        // 활성화 버튼
-        if (widget.chatService.canActivatePreference)
-          ElevatedButton(
-            onPressed: _isLoading ? null : _activatePreference,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).primaryColor,
-              foregroundColor: Colors.white,
-            ),
-            child: _isLoading 
-              ? const SizedBox(
-                  width: 16, 
-                  height: 16, 
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2, 
-                    color: Colors.white
-                  )
-                )
-              : const Text('활성화 (1000P)'),
-          ),
-      ],
     );
   }
 
